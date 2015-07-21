@@ -15,16 +15,14 @@ limitations under the License.
 */
 package com.twitter.parrot.server
 
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue}
+
 import com.twitter.finagle.Service
 import com.twitter.logging.Logger
 import com.twitter.ostrich.stats.Stats
-import com.twitter.parrot.util.RequestDistribution
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.atomic.{ AtomicReference, AtomicBoolean }
-import com.twitter.util.Promise
-import com.twitter.util.Await
-import com.twitter.util.Stopwatch
-import com.twitter.parrot.util.PrettyDuration
+import com.twitter.parrot.util.{PrettyDuration, RequestDistribution}
+import com.twitter.util.{Promise, Stopwatch}
 
 class RequestConsumer[Req <: ParrotRequest, Rep](
     distributionFactory: Int => RequestDistribution,
@@ -35,7 +33,8 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   private[this] val log = Logger.get(getClass)
   private[this] val queue = new LinkedBlockingQueue[Req]()
   private[this] var rate: Int = 1
-  private[this] val done = Promise[Unit]
+  private[this] val done = new CountDownLatch(1)
+  @volatile private[this] var running = true
 
   val started = Promise[Unit]
 
@@ -47,7 +46,9 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   var totalProcessed = 0
 
   def offer(request: Req) {
-    queue.offer(request)
+    if (running) {
+      queue.offer(request)
+    }
   }
 
   override def start() {
@@ -68,12 +69,12 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
       val request = queue.take()
       started.setValue(())
       send(request, System.nanoTime())
-      while (true) takeOne
+      while (running) takeOne
     } catch {
       case e: InterruptedException =>
     }
-    while (queue.size() > 0) takeOne
-    done.setValue(())
+    while (queue.size() > 0 && running) takeOne
+    done.countDown()
   }
 
   private def send(request: Req, start: Long) {
@@ -135,8 +136,9 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
 
   def shutdown: Unit = {
     val elapsed = Stopwatch.start()
-    interrupt
-    Await.ready(done)
+    running = false
+    queue.clear()
+    done.await()
     log.trace("RequestConsumer shut down in %s", PrettyDuration(elapsed()))
   }
 
