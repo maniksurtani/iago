@@ -39,7 +39,8 @@ trait ParrotServer[Req <: ParrotRequest, Rep] extends ParrotServerService.Future
   val config: ParrotServerConfig[Req, Rep]
 }
 
-class ParrotServerImpl[Req <: ParrotRequest, Rep](val config: ParrotServerConfig[Req, Rep])
+class ParrotServerImpl[Req <: ParrotRequest, Rep](val config: ParrotServerConfig[Req, Rep],
+                                                  val statsName: String = "global")
   extends ParrotServer[Req, Rep] {
   private[this] val log = Logger.get(getClass)
   private[this] var status: ParrotStatus = ParrotStatus(status = Some(ParrotState.Unknown))
@@ -116,7 +117,7 @@ class ParrotServerImpl[Req <: ParrotRequest, Rep](val config: ParrotServerConfig
   }
 
   def getStatus: Future[ParrotStatus] = Future {
-    val collection = Stats.get("global")
+    val collection = Stats.get(statsName)
 
     val rps = collection.getGauge("qps") match {
       case Some(d) => d

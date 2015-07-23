@@ -15,6 +15,8 @@ limitations under the License.
 */
 package com.twitter.parrot.server
 
+import com.twitter.ostrich.stats.Stats
+
 import collection.mutable
 import com.twitter.finagle.builder.ClientBuilder
 import com.twitter.finagle.stats.OstrichStatsReceiver
@@ -37,8 +39,8 @@ abstract class MemcacheLikeTransportFactory[Req, Rep] extends ParrotTransportFac
 
   protected def fromService(service: Service[Req, Rep]): MemcacheLikeTransport[Req, Rep]
 
-  def apply(config: ParrotServerConfig[ParrotRequest, Rep]) = {
-    val statsReceiver = new OstrichStatsReceiver
+  def apply(config: ParrotServerConfig[ParrotRequest, Rep], statsName: String = "") = {
+    val statsReceiver = new OstrichStatsReceiver(Stats.make(statsName))
 
     val builder = ClientBuilder()
       .codec(codec)

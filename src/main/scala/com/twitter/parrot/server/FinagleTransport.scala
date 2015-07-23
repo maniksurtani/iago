@@ -16,6 +16,8 @@ limitations under the License.
 
 package com.twitter.parrot.server
 
+import com.twitter.ostrich.stats.Stats
+
 import collection.mutable
 import com.twitter.finagle.builder.ClientBuilder
 import com.twitter.finagle.http.Http
@@ -33,8 +35,8 @@ import org.jboss.netty.util.CharsetUtil.UTF_8
 import com.twitter.util._
 
 object FinagleTransportFactory extends ParrotTransportFactory[ParrotRequest, HttpResponse] {
-  def apply(config: ParrotServerConfig[ParrotRequest, HttpResponse]) = {
-    val statsReceiver = new OstrichStatsReceiver
+  def apply(config: ParrotServerConfig[ParrotRequest, HttpResponse], statsName: String = "") = {
+    val statsReceiver = new OstrichStatsReceiver(Stats.make(statsName))
 
     val builder = ClientBuilder()
       .codec(Http())
