@@ -88,5 +88,6 @@ class RequestQueue[Req <: ParrotRequest, Rep](
 
   def setStatsName(name: String) {
     statsName = name
+    consumer.setStatsName(statsName)
   }
 }

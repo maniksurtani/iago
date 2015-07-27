@@ -110,7 +110,7 @@ class ParrotServerImpl[Req <: ParrotRequest, Rep](val config: ParrotServerConfig
     config.recordProcessor.processLines(lines)
     log.trace("sendRequest: done calling process lines with %d lines", lines.size)
 
-    Stats.incr("records-read", lines.size)
+    Stats.get(statsName).incr("records-read", lines.size)
     val result = getStatus.map(_.copy(linesProcessed = Some(lines.size)))
     log.trace("exiting sendRequest")
     result

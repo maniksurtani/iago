@@ -46,6 +46,7 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   var totalProcessed = 0
 
   private[this] val suspended = new AtomicBoolean(false)
+  private[this] var statsName = ""
 
   def offer(request: Req) {
     if (running) {
@@ -87,7 +88,7 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   private def send(request: Req) {
     try {
       val future = transport(request)
-      Stats.incr("requests_sent")
+      Stats.get(statsName).incr("requests_sent")
       future.respond { _ =>
         totalProcessed += 1
       }
@@ -155,6 +156,10 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   def setRate(newRate: Int) {
     rate = newRate
     process.set(distributionFactory(rate))
+  }
+
+  def setStatsName(name: String): Unit = {
+    statsName = name
   }
 
   def shutdown: Unit = {
