@@ -21,6 +21,7 @@ import com.twitter.finagle.builder.ClientBuilder
 import com.twitter.finagle.stats.OstrichStatsReceiver
 import com.twitter.finagle.zipkin.thrift.ZipkinTracer
 import com.twitter.finagle.thrift.{ClientId, ThriftClientFramedCodecFactory, ThriftClientRequest}
+import com.twitter.ostrich.stats.Stats
 import com.twitter.parrot.config.ParrotServerConfig
 import com.twitter.util.Duration
 import com.twitter.util.Future
@@ -30,14 +31,14 @@ import com.twitter.util.Await
 import org.apache.thrift.protocol.TBinaryProtocol
 
 object ThriftTransportFactory extends ParrotTransportFactory[ParrotRequest, Array[Byte]] {
-  def apply(config: ParrotServerConfig[ParrotRequest, Array[Byte]]) = {
+  def apply(config: ParrotServerConfig[ParrotRequest, Array[Byte]], statsName: String = "") = {
     val thriftClientId =
       config.thriftClientId match {
         case "" => None
         case id => Some(ClientId(id))
       }
 
-    val statsReceiver = new OstrichStatsReceiver
+    val statsReceiver = new OstrichStatsReceiver(Stats.make(statsName))
 
     val thriftProtocolFactory = config.thriftProtocolFactory.getOrElse(new TBinaryProtocol.Factory())
     val codec = new ThriftClientFramedCodecFactory(thriftClientId, false, thriftProtocolFactory)

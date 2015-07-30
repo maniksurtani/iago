@@ -15,7 +15,7 @@ limitations under the License.
 */
 package com.twitter.parrot.server
 
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue}
 
 import com.twitter.finagle.Service
@@ -44,6 +44,9 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   private[server] var totalClockError = 0L
 
   var totalProcessed = 0
+
+  private[this] val suspended = new AtomicBoolean(false)
+  private[this] var statsName = ""
 
   def offer(request: Req) {
     if (running) {
@@ -85,7 +88,7 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   private def send(request: Req) {
     try {
       val future = transport(request)
-      Stats.incr("requests_sent")
+      Stats.get(statsName).incr("requests_sent")
       future.respond { _ =>
         totalProcessed += 1
       }
@@ -96,29 +99,50 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
   }
 
   private def sleep(weight: Int, start: Long) {
+
     if (rate > 0) {
-      val waitTime =
-        ((1 to weight).map { _ =>
-          process.get.timeToNextArrival().inNanoseconds
-        }).sum - totalClockError
+      val sum = (1 to weight).map { _ =>
+        process.get.timeToNextArrival().inNanoseconds
+      }.sum
+
+      val waitTime = sum - totalClockError
       totalClockError = 0L
       waitForNextRequest(waitTime)
+
+
       totalClockError += System.nanoTime() - start - waitTime
     }
   }
 
   private def takeOne {
+
+    synchronized {
+      while (suspended.get()) {
+        try {
+          wait()
+        } catch {
+          case ie: InterruptedException =>
+        }
+
+        if (!running) return
+      }
+    }
+
     val start = System.nanoTime()
     val request = queue.take()
     send(request, start)
   }
 
   def pause() {
-    suspend
+    suspended.set(true)
   }
 
   def continue() {
-    resume
+    synchronized {
+      if (suspended.compareAndSet(true, false)) {
+        notify()
+      }
+    }
   }
 
   def size = {
@@ -134,9 +158,14 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
     process.set(distributionFactory(rate))
   }
 
+  def setStatsName(name: String): Unit = {
+    statsName = name
+  }
+
   def shutdown: Unit = {
     val elapsed = Stopwatch.start()
     running = false
+    continue()
     queue.clear()
     done.await()
     log.trace("RequestConsumer shut down in %s", PrettyDuration(elapsed()))

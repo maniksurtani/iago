@@ -29,6 +29,7 @@ class RequestQueue[Req <: ParrotRequest, Rep](
 ) {
 
   private[this] val log = Logger.get(getClass)
+  private[this] var statsName = ""
 
   def addRequest(request: Req): Future[Rep] = {
     val response = new Promise[Rep]()
@@ -51,19 +52,21 @@ class RequestQueue[Req <: ParrotRequest, Rep](
 
   def start() {
     log.debug("starting RequestQueue")
-    Stats.addGauge("queue_depth") { queueDepth }
-    Stats.addGauge("clock_error") { clockError }
+    val collection = Stats.get(statsName)
+
+    collection.addGauge("queue_depth") { queueDepth }
+    collection.addGauge("clock_error") { clockError }
     transport respond {
       case Return(response) => transport.stats(response) map {
-        Stats.incr(_)
+        collection.incr(_)
       }
       case Throw(t) => t match {
         case e: ConnectException =>
-          if (e.getMessage.contains("timed out")) Stats.incr("response_timeout")
-          if (e.getMessage.contains("refused")) Stats.incr("connection_refused")
+          if (e.getMessage.contains("timed out")) collection.incr("response_timeout")
+          if (e.getMessage.contains("refused")) collection.incr("connection_refused")
         case t => {
-          Stats.incr("unexpected_error")
-          Stats.incr("unexpected_error/" + t.getClass.getName)
+          collection.incr("unexpected_error")
+          collection.incr("unexpected_error/" + t.getClass.getName)
           log.error("unexpected error: %s", t)
         }
       }
@@ -81,5 +84,10 @@ class RequestQueue[Req <: ParrotRequest, Rep](
   def shutdown() {
     consumer.shutdown
     log.trace("RequestQueue: shutdown")
+  }
+
+  def setStatsName(name: String) {
+    statsName = name
+    consumer.setStatsName(statsName)
   }
 }
