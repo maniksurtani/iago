@@ -16,7 +16,7 @@ limitations under the License.
 package com.twitter.parrot.server
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-import java.util.concurrent.{CountDownLatch, LinkedBlockingQueue}
+import java.util.concurrent.{TimeUnit, CountDownLatch, LinkedBlockingQueue}
 
 import com.twitter.finagle.Service
 import com.twitter.logging.Logger
@@ -129,8 +129,10 @@ class RequestConsumer[Req <: ParrotRequest, Rep](
     }
 
     val start = System.nanoTime()
-    val request = queue.take()
-    send(request, start)
+    val request = queue.poll(1, TimeUnit.SECONDS)
+    if (request != null) {
+      send(request, start)
+    }
   }
 
   def pause() {
